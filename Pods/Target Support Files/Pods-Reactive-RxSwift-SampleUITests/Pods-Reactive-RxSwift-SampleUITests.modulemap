@@ -1,0 +1,6 @@
+framework module Pods_Reactive_RxSwift_SampleUITests {
+  umbrella header "Pods-Reactive-RxSwift-SampleUITests-umbrella.h"
+
+  export *
+  module * { export * }
+}
