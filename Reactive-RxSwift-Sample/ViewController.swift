@@ -5,6 +5,14 @@
 //  Created by Miel on 2/25/2560 BE.
 //  Copyright © 2560 Lumos. All rights reserved.
 //
+//  This project is followed by the tutorial "The introduction to Reactive Programming you've been missing" made by "Andre Staltz" and use RxSwift instead of RxJS.
+//
+//  The code is written in Swift 3 & Xcode 8.1
+//
+//  Using document based on RxSwift version 3.0 link down below
+//  >> http://cocoadocs.org/docsets/RxSwift/3.2.0
+//  >> http://cocoadocs.org/docsets/RxCocoa/3.2.0
+//
 
 import UIKit
 import RxSwift
@@ -50,7 +58,7 @@ class ViewController: UIViewController {
         // Dispose of any resources that can be recreated.
     }
     
-    //MARK: - Setup UI
+    //MARK: - Setup Stream
     private func setUpStream() {
         let refreshClickStream = btn_refresh.rx.controlEvent(.touchUpInside).asObservable()
         let randomUserFunction = { () -> String in
@@ -102,9 +110,18 @@ class ViewController: UIViewController {
          */
         
         // Create similar style of stream as tutorial
-        setBasicSuggestionStream(responseStream: responseStream, refreshClickStream: refreshClickStream)
+//        setBasicSuggestionStream(responseStream: responseStream, refreshClickStream: refreshClickStream)
+        // Create enhance style of stream from tutorial
+        setEnhanceSuggestionStream(responseStream: responseStream, refreshClickStream: refreshClickStream)
     }
     
+    /**
+     Create similar style of stream as tutorial
+     
+     - Parameters:
+       - responseStream: response observable of data from service
+       - refreshClickStream: refresh click observable
+     */
     private func setBasicSuggestionStream(responseStream:Observable<optionalJsonArray>, refreshClickStream: Observable<()>) {
         let refreshClickClearSuggestionStream = refreshClickStream.map { () -> JSON? in
             return nil
@@ -230,10 +247,79 @@ class ViewController: UIViewController {
         )
     }
     
-    private func setEnhanceSuggestionStream(responseStream:Observable<optionalJsonArray>, refreshClickStream: Observable<()>) {
+    /**
+     Create enhance style of stream from tutorial
+     
+     - Parameters:
+       - responseStream: response observable of data from service
+       - refreshClickStream: refresh click observable
+     */
+    private func setEnhanceSuggestionStream(responseStream: Observable<optionalJsonArray>, refreshClickStream: Observable<()>) {
+        let responseShareStream = responseStream.share() // share() for multicasting response stream == publish().refCount()
+    
+        let close1ClickStream = createCloseSuggestionStream(btn_close: btn_suggest1_close)
+        let close2ClickStream = createCloseSuggestionStream(btn_close: btn_suggest2_close)
+        let close3ClickStream = createCloseSuggestionStream(btn_close: btn_suggest3_close)
         
+        let suggestion1Stream = createSuggestionStream(closeClickStream: close1ClickStream, responseStream: responseShareStream, refreshClickStream: refreshClickStream)
+        let suggestion2Stream = createSuggestionStream(closeClickStream: close2ClickStream, responseStream: responseShareStream, refreshClickStream: refreshClickStream)
+        let suggestion3Stream = createSuggestionStream(closeClickStream: close3ClickStream, responseStream: responseShareStream, refreshClickStream: refreshClickStream)
+        
+        _ = suggestion1Stream.subscribe(onNext: {[unowned self] (suggestJson) in
+            self.renderSuggestionItem(suggestJson: suggestJson, view_container: self.view_suggest1, lbl_name: self.lbl_suggest1_name, lbl_link: self.lbl_suggest1_link, imgv_avatar: self.imgv_suggest1)
+        })
+        
+        _ = suggestion2Stream.subscribe(onNext: {[unowned self] (suggestJson) in
+            self.renderSuggestionItem(suggestJson: suggestJson, view_container: self.view_suggest2, lbl_name: self.lbl_suggest2_name, lbl_link: self.lbl_suggest2_link, imgv_avatar: self.imgv_suggest2)
+        })
+        
+        _ = suggestion3Stream.subscribe(onNext: {[unowned self] (suggestJson) in
+            self.renderSuggestionItem(suggestJson: suggestJson, view_container: self.view_suggest3, lbl_name: self.lbl_suggest3_name, lbl_link: self.lbl_suggest3_link, imgv_avatar: self.imgv_suggest3)
+        })
     }
     
+    private func createCloseSuggestionStream(btn_close: UIButton) -> Observable<Void> {
+        return Observable
+            .of(btn_close.rx.controlEvent(.touchUpInside).asObservable()
+                , Observable.just()
+            ).merge()
+    }
+    
+    private func createSuggestionStream(closeClickStream: Observable<Void>, responseStream: Observable<optionalJsonArray>, refreshClickStream: Observable<()>) -> Observable<JSON?> {
+        return Observable
+            .of(Observable.combineLatest(closeClickStream.map{()->JSON? in return nil}
+                , responseStream, resultSelector: { (_, userJsonArray) -> JSON? in
+                    if let listUser = userJsonArray, listUser.count > 0 {
+                        return listUser[Int(arc4random_uniform(UInt32(listUser.count)))]
+                    }
+                    return nil
+            })
+                ,refreshClickStream.map { () -> JSON? in
+                    return nil
+                }
+            )
+            .merge()
+            .startWith(nil)
+    }
+    
+    private func renderSuggestionItem(suggestJson: JSON?, view_container: UIView, lbl_name: UILabel, lbl_link: UILabel, imgv_avatar: UIImageView) {
+        if let suggest = suggestJson {
+            // show the third suggestion View element
+            print("show the 3rd suggestion View element")
+            view_container.alpha = 1
+            let id = suggest[GitHubJsonKey.id].stringValue
+            let name = suggest[GitHubJsonKey.name].stringValue
+            lbl_name.text = "\(id) \(name)"
+            lbl_link.text = suggest[GitHubJsonKey.userUrl].string
+            let url = URL(string: suggest[GitHubJsonKey.avatarUrl].stringValue)
+            imgv_avatar.kf.setImage(with: url)
+        }else {
+            // hide the third suggestion View element
+            print("hide the 3rd suggestion View element")
+            view_container.alpha = 0
+        }
+    }
+
     //MARK: - Methods
     private func getGitHubUser(requestUrl: String) -> Observable<optionalJsonArray> {
         return Observable.create({ (observer) -> Disposable in
@@ -267,6 +353,7 @@ class ViewController: UIViewController {
         })
     }
     
+    //MARK: - Utils
     typealias optionalJsonArray = [JSON]?
     
     enum ServiceError: Error {
